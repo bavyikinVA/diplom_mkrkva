@@ -5,8 +5,10 @@
         <h1 class="section-title">Каталог вкладов</h1>
         <p class="section-subtitle">Подбор вкладов по ключевым условиям.</p>
       </div>
+
       <div class="catalog-page__summary card">
-        Найдено предложений: <strong>{{ store.total }}</strong>
+        <div>Найдено предложений: <strong>{{ store.total }}</strong></div>
+        <!--<div>Страница: <strong>{{ store.page }}</strong></div>-->
       </div>
     </div>
 
@@ -17,14 +19,25 @@
         <UiLoader v-if="store.loading" />
         <div v-else-if="store.error" class="catalog-page__error card">{{ store.error }}</div>
         <UiEmptyState v-else-if="!store.items.length" />
-        <DepositGrid v-else :items="store.items" />
+        <template v-else>
+          <DepositGrid :items="store.items" />
+          <PaginationBar
+            :page="store.page"
+            :page-size="store.pageSize"
+            :total="store.total"
+            @change="changePage"
+          />
+        </template>
       </div>
     </div>
+
+    <BackToTopButton />
   </section>
 </template>
 
 <script setup>
 import { onMounted, ref } from 'vue'
+import BackToTopButton from '../components/BackToTopButton.vue'
 import DepositGrid from '../components/DepositGrid.vue'
 import FiltersPanel from '../components/FiltersPanel.vue'
 import UiEmptyState from '../components/UiEmptyState.vue'
@@ -35,7 +48,14 @@ const store = useDepositsStore()
 const filters = ref({ ...store.filters })
 
 async function handleSubmit(payload) {
-  await store.loadDeposits(payload)
+  await store.loadDeposits({ ...payload, page: 1 })
+  filters.value = { ...store.filters }
+}
+
+async function changePage(page) {
+  await store.goToPage(page)
+  filters.value = { ...store.filters }
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 onMounted(async () => {
@@ -59,6 +79,8 @@ onMounted(async () => {
 
 .catalog-page__summary {
   padding: 18px 22px;
+  display: grid;
+  gap: 6px;
 }
 
 .catalog-page__layout {

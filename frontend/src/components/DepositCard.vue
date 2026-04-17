@@ -2,43 +2,41 @@
   <article class="deposit card">
     <div class="deposit__top">
       <div class="deposit__bank-wrap">
-        <div class="deposit__bank">{{ item.product?.bank?.name || 'Банк' }}</div>
-        <h3>{{ item.name }}</h3>
-        <p v-if="item.description" class="deposit__description">
-          {{ item.description }}
+        <div class="deposit__bank">{{ bankName }}</div>
+        <h3>{{ depositName }}</h3>
+        <p v-if="depositDescription" class="deposit__description">
+          {{ depositDescription }}
         </p>
-      </div>
-
-      <div class="deposit__rate">
-        <span class="deposit__rate-label">Номинальная ставка</span>
-        <UiBadge>{{ percent(displayRate) }}</UiBadge>
       </div>
     </div>
 
     <div class="deposit__features">
-      <span class="deposit__feature" :class="{ 'is-active': item.allow_topup }">
-        Пополнение: {{ item.allow_topup ? 'Да' : 'Нет' }}
+      <span class="deposit__feature" :class="{ 'is-active': allowTopup }">
+        Пополнение: {{ allowTopup ? 'Да' : 'Нет' }}
       </span>
-      <span class="deposit__feature" :class="{ 'is-active': item.allow_partial_withdraw }">
-        Частичное снятие: {{ item.allow_partial_withdraw ? 'Да' : 'Нет' }}
+
+      <span class="deposit__feature" :class="{ 'is-active': allowPartialWithdraw }">
+        Частичное снятие: {{ allowPartialWithdraw ? 'Да' : 'Нет' }}
       </span>
-      <span class="deposit__feature" :class="{ 'is-active': item.auto_prolongation }">
-        Автопролонгация: {{ item.auto_prolongation ? 'Да' : 'Нет' }}
+
+      <span class="deposit__feature" :class="{ 'is-active': autoProlongation }">
+        Автопролонгация: {{ autoProlongation ? 'Да' : 'Нет' }}
       </span>
+
       <span class="deposit__feature">
-        Валюта: {{ item.product?.currency || 'RUB' }}
+        Валюта: {{ currencyCode }}
       </span>
     </div>
 
     <div class="deposit__grid">
       <div class="deposit__metric">
         <span>Минимальная сумма</span>
-        <strong>{{ currency(item.min_amount, item.product?.currency || 'RUB') }}</strong>
+        <strong>{{ currency(minAmount, currencyCode) }}</strong>
       </div>
 
       <div class="deposit__metric">
         <span>Срок</span>
-        <strong>{{ daysToMonthsLabel(item.min_term_days) }}</strong>
+        <strong>{{ daysToMonthsLabel(minTermDays) }}</strong>
       </div>
 
       <div class="deposit__metric">
@@ -64,9 +62,9 @@
 
       <div class="deposit__actions">
         <RouterLink
-            class="btn btn-secondary"
-            :to="`/calculator?variant=${item.id}`"
-            @click="selectVariant"
+          class="btn btn-secondary"
+          :to="calculatorLink"
+          @click="selectVariant"
         >
           В калькулятор
         </RouterLink>
@@ -80,7 +78,30 @@ import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useFormatters } from '../composables/useFormatters'
 import { useDepositsStore } from '../stores/deposits'
-import UiBadge from './UiBadge.vue'
+
+/**
+ * @typedef {Object} DepositCardItem
+ * @property {number|string} [id]
+ * @property {string} [name]
+ * @property {string|null} [description]
+ * @property {boolean} [allow_topup]
+ * @property {boolean} [allow_partial_withdraw]
+ * @property {boolean} [auto_prolongation]
+ * @property {number|string|null} [min_amount]
+ * @property {number|null} [min_term_days]
+ * @property {number|string|null} [matched_final_nominal_rate]
+ * @property {{ nominal_rate?: number|string|null }} [matched_rate]
+ * @property {number|string|null} [nominal_rate]
+ * @property {{ nominal_rate?: number|string|null }} [base_rate]
+ * @property {Array<{ name?: string }>} [open_methods]
+ * @property {Array<{ name?: string }>} [interest_schemes]
+ * @property {{ name?: string }} [bank]
+ * @property {{
+ *   currency?: string,
+ *   bank?: { name?: string },
+ *   bank_name?: string
+ * }} [product]
+ */
 
 const props = defineProps({
   item: {
@@ -92,25 +113,56 @@ const props = defineProps({
 const store = useDepositsStore()
 const { currency, percent, daysToMonthsLabel } = useFormatters()
 
+/** @type {import('vue').ComputedRef<DepositCardItem>} */
+const itemModel = computed(() => props.item || {})
+
+const depositId = computed(() => itemModel.value.id ?? '')
+const depositName = computed(() => itemModel.value.name || 'Вклад')
+const depositDescription = computed(() => itemModel.value.description || '')
+
+const allowTopup = computed(() => Boolean(itemModel.value.allow_topup))
+const allowPartialWithdraw = computed(() => Boolean(itemModel.value.allow_partial_withdraw))
+const autoProlongation = computed(() => Boolean(itemModel.value.auto_prolongation))
+
+const minAmount = computed(() => itemModel.value.min_amount ?? 0)
+const minTermDays = computed(() => itemModel.value.min_term_days ?? 0)
+
+const currencyCode = computed(() => {
+  return itemModel.value.product?.currency || 'RUB'
+})
+
+const bankName = computed(() => {
+  return (
+    itemModel.value.bank?.name ||
+    itemModel.value.product?.bank?.name ||
+    itemModel.value.product?.bank_name ||
+    'Банк'
+  )
+})
+
 const displayRate = computed(() => {
   return (
-      props.item.matched_final_nominal_rate ??
-      props.item.matched_rate?.nominal_rate ??
-      props.item.nominal_rate ??
-      props.item.base_rate?.nominal_rate ??
-      null
+    itemModel.value.matched_final_nominal_rate ??
+    itemModel.value.matched_rate?.nominal_rate ??
+    itemModel.value.nominal_rate ??
+    itemModel.value.base_rate?.nominal_rate ??
+    null
   )
 })
 
 const openMethodsLabel = computed(() => {
-  if (!props.item.open_methods?.length) return 'Не указано'
-  return props.item.open_methods.map((method) => method.name).join(', ')
+  const methods = itemModel.value.open_methods || []
+  if (!methods.length) return 'Не указано'
+  return methods.map((method) => method.name).filter(Boolean).join(', ')
 })
 
 const interestSchemesLabel = computed(() => {
-  if (!props.item.interest_schemes?.length) return 'Не указано'
-  return props.item.interest_schemes.map((scheme) => scheme.name).join(', ')
+  const schemes = itemModel.value.interest_schemes || []
+  if (!schemes.length) return 'Не указано'
+  return schemes.map((scheme) => scheme.name).filter(Boolean).join(', ')
 })
+
+const calculatorLink = computed(() => `/calculator?variant=${depositId.value}`)
 
 function selectVariant() {
   store.setSelectedVariant(props.item)
@@ -149,18 +201,6 @@ function selectVariant() {
   margin: 0;
   color: var(--text-soft);
   line-height: 1.5;
-}
-
-.deposit__rate {
-  min-width: 160px;
-  display: grid;
-  gap: 8px;
-  justify-items: end;
-}
-
-.deposit__rate-label {
-  color: var(--text-soft);
-  font-size: 13px;
 }
 
 .deposit__features {
@@ -233,10 +273,6 @@ function selectVariant() {
   .deposit__footer {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .deposit__rate {
-    justify-items: start;
   }
 
   .deposit__grid {

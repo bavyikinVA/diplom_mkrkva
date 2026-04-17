@@ -1,8 +1,8 @@
 <template>
   <div>
     <HeroSection />
-    <HomeStatsSection :stats="store.stats" />
     <HowItWorksSection />
+    <HomeStatsSection :stats="store.stats" />
   </div>
 </template>
 

@@ -1,14 +1,14 @@
 <template>
   <section class="container calculator-page">
-    <div class="calculator-page__head">
-      <h1 class="section-title">Калькулятор вкладов</h1>
-    </div>
-
     <div class="calculator-page__layout">
-      <CalculatorForm :variant-id="variantId" @submit="submit" />
+      <CalculatorForm
+        :variant="store.selectedVariant"
+        :loading="store.selectedVariantLoading"
+        @submit="submit"
+      />
 
       <div class="calculator-page__side">
-        <UiLoader v-if="store.calculatorLoading || store.selectedVariantLoading" />
+        <UiLoader v-if="store.selectedVariantLoading || store.calculatorLoading" />
 
         <div v-else-if="store.selectedVariantError" class="calculator-page__error card">
           {{ store.selectedVariantError }}
@@ -25,30 +25,32 @@
 </template>
 
 <script setup>
-import { computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import CalculationResultCard from '../components/CalculationResultCard.vue'
+import {computed, onMounted, watch} from 'vue'
+import {useRoute} from 'vue-router'
+import {useDepositsStore} from '../stores/deposits'
 import CalculatorForm from '../components/CalculatorForm.vue'
+import CalculationResultCard from '../components/CalculationResultCard.vue'
 import UiLoader from '../components/UiLoader.vue'
-import { useDepositsStore } from '../stores/deposits'
 
-const store = useDepositsStore()
 const route = useRoute()
+const store = useDepositsStore()
 
-const variantId = computed(() => route.query.variant || '')
+const variantId = computed(() => {
+  const raw = route.query.variant
+  return raw ? Number(raw) : null
+})
 
-async function ensureVariantLoaded() {
-  if (variantId.value) {
-    await store.loadVariantById(variantId.value)
-  }
+async function loadVariant() {
+  if (!variantId.value) return
+  await store.loadVariantById(variantId.value)
 }
 
 onMounted(async () => {
-  await ensureVariantLoaded()
+  await loadVariant()
 })
 
 watch(variantId, async () => {
-  await ensureVariantLoaded()
+  await loadVariant()
 })
 
 async function submit(payload) {

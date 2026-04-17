@@ -17,8 +17,17 @@ export function useFormatters() {
     const daysToMonthsLabel = (days) => {
         if (!days) return '—'
         const months = Math.round(Number(days) / 30)
-        return `${days} дн. · ~${months} мес.`
+        return `${days} дн. (~${months} мес.)`
     }
 
     return { currency, percent, daysToMonthsLabel }
+}
+export function payoutTypeLabel(code) {
+    const map = {
+    end_of_term: 'В конце срока',
+    monthly: 'Ежемесячно',
+    quarterly: 'Ежеквартально',
+    yearly: 'Ежегодно'
+    }
+    return map[code] || code
 }

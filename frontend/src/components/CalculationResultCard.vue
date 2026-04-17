@@ -5,7 +5,6 @@
         <div class="result__label">Результат расчёта</div>
         <h3>{{ result.variant_name }}</h3>
       </div>
-      <UiBadge>{{ percent(result.final_nominal_rate) }}</UiBadge>
     </div>
 
     <div class="result__grid">
@@ -38,7 +37,9 @@
     <div class="result__meta">
       <span>Выплата: {{ payoutLabel }}</span>
       <span>Капитализация: {{ result.capitalization_enabled ? 'Да' : 'Нет' }}</span>
-      <span v-if="result.capitalization_frequency">Частота капитализации: {{ result.capitalization_frequency }}</span>
+      <span v-if="result.capitalization_frequency">
+        Частота капитализации: {{ capitalizationFrequencyLabel }}
+      </span>
     </div>
   </section>
 </template>
@@ -67,13 +68,28 @@ const payoutLabel = computed(() => {
   const value = props.result?.payout_type
 
   const map = {
+    end_of_term: 'в конце срока',
     end: 'в конце срока',
     monthly: 'ежемесячно',
     quarterly: 'ежеквартально',
+    yearly: 'ежегодно',
     daily: 'ежедневно'
   }
 
   return map[value] || value || 'не указано'
+})
+
+const capitalizationFrequencyLabel = computed(() => {
+  const value = props.result?.capitalization_frequency
+
+  const map = {
+    monthly: 'ежемесячно',
+    quarterly: 'ежеквартально',
+    yearly: 'ежегодно',
+    daily: 'ежедневно'
+  }
+
+  return map[value] || value
 })
 </script>
 

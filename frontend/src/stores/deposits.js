@@ -33,7 +33,7 @@ export const useDepositsStore = defineStore('deposits', {
         },
 
         filters: {
-            amount: 300000,
+            amount: 50000,
             term_days: 367,
             currency: 'RUB',
             capitalization_enabled: null,

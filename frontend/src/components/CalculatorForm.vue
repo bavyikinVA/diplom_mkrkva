@@ -2,43 +2,56 @@
   <form class="calculator card" @submit.prevent="submit">
     <h2>Калькулятор вклада</h2>
 
-    <div class="calculator__grid">
-      <UiInput v-model="form.variant_id" label="ID варианта вклада" type="number" />
-      <UiInput v-model="form.amount" label="Сумма" type="number" />
-
-      <UiSelect
-          v-model="termValue"
-          label="Срок вклада"
-          :options="termOptions"
-      />
-
-      <UiSelect
-          v-model="form.open_method_code"
-          label="Способ открытия"
-          :options="openMethodOptions"
-      />
-
-      <UiSelect
-          v-model="form.interest_scheme_code"
-          label="Схема начисления процентов"
-          :options="interestSchemeOptions"
-      />
-
-      <UiInput v-model="form.promo_code" label="Промокод" />
-    </div>
-
-    <div v-if="selectedVariant" class="calculator__selected">
+    <div v-if="variant" class="calculator__selected">
       <div class="calculator__selected-title">Выбран вклад</div>
       <div class="calculator__selected-name">
-        {{ selectedVariant.product?.bank?.name || 'Банк' }} — {{ selectedVariant.name }}
+        {{ bankName }} — {{ variantName }}
       </div>
       <div class="calculator__selected-meta">
-        Сумма от {{ selectedVariant.min_amount }} ·
-        срок от {{ selectedVariant.min_term_days }} дн.
-        <template v-if="selectedVariant.max_term_days">
-          до {{ selectedVariant.max_term_days }} дн.
+        Сумма от {{ amountLabel }} · срок от {{ minTermLabel }}
+        <template v-if="maxTermDays">
+          до {{ maxTermLabel }}
         </template>
       </div>
+    </div>
+
+    <div v-else-if="loading" class="calculator__placeholder">
+      Загрузка параметров вклада...
+    </div>
+
+    <div v-else class="calculator__placeholder">
+      Перейдите в калькулятор из карточки вклада.
+    </div>
+
+    <div class="calculator__grid">
+      <UiInput
+        v-model="form.amount"
+        label="Сумма"
+        type="number"
+      />
+
+      <UiSelect
+        v-model="termValue"
+        label="Срок вклада"
+        :options="termOptions"
+      />
+
+      <UiInput
+        v-model="form.promo_code"
+        label="Промокод"
+      />
+
+      <UiSelect
+        v-model="form.open_method_code"
+        label="Способ открытия"
+        :options="openMethodOptions"
+      />
+
+      <UiSelect
+        v-model="form.interest_scheme_code"
+        label="Выплата процентов"
+        :options="interestSchemeOptions"
+      />
     </div>
 
     <div class="calculator__checks">
@@ -48,74 +61,97 @@
       <UiCheckbox v-model="form.has_premium_package" label="Премиум-пакет" />
     </div>
 
-    <div class="calculator__grid calculator__grid--secondary">
-      <UiInput v-model="form.monthly_spend" label="Траты в месяц" type="number" />
-      <UiInput v-model="form.savings_balance" label="Остаток на счетах" type="number" />
-    </div>
-
-    <button class="btn btn-primary" type="submit">Рассчитать доходность</button>
+    <button
+      class="btn btn-primary"
+      type="submit"
+      :disabled="!variant || !isReadyToSubmit"
+    >
+      Рассчитать доходность
+    </button>
   </form>
 </template>
 
 <script setup>
-import { computed, reactive, watch, watchEffect } from 'vue'
-import { useDepositsStore } from '../stores/deposits'
+import { computed, reactive, watch } from 'vue'
 import UiCheckbox from './UiCheckbox.vue'
 import UiInput from './UiInput.vue'
 import UiSelect from './UiSelect.vue'
 
 const props = defineProps({
-  variantId: {
-    type: [String, Number],
-    default: ''
+  variant: {
+    type: Object,
+    default: null
+  },
+  loading: {
+    type: Boolean,
+    default: false
   }
 })
 
 const emit = defineEmits(['submit'])
 
-const store = useDepositsStore()
-const selectedVariant = computed(() => store.selectedVariant)
-
 const form = reactive({
-  variant_id: '',
-  amount: 300000,
-  term_days: 367,
+  amount: '',
+  term_days: '',
   open_method_code: '',
   interest_scheme_code: '',
   has_subscription: false,
   is_salary_client: false,
   is_pension_client: false,
-  monthly_spend: '',
-  savings_balance: '',
   has_premium_package: false,
   promo_code: ''
 })
 
-function normalizeOpenMethod(item) {
-  if (!item) return null
+const variantName = computed(() => props.variant?.name || 'Вклад')
 
-  const source = item.open_method || item
+const bankName = computed(() => {
+  return (
+    props.variant?.bank?.name ||
+    props.variant?.product?.bank?.name ||
+    props.variant?.product?.bank_name ||
+    'Банк'
+  )
+})
 
-  return {
-    code: source.code || '',
-    name: source.name || source.code || 'Не указано'
-  }
+const currencyCode = computed(() => props.variant?.product?.currency || 'RUB')
+const minAmount = computed(() => Number(props.variant?.min_amount || 0))
+const minTermDays = computed(() => Number(props.variant?.min_term_days || 0))
+const maxTermDays = computed(() => Number(props.variant?.max_term_days || 0))
+
+const amountLabel = computed(() => {
+  if (!minAmount.value) return '—'
+  return `${minAmount.value.toFixed(2)} ${currencyCode.value}`
+})
+
+const minTermLabel = computed(() => {
+  return minTermDays.value ? `${minTermDays.value} дн.` : '—'
+})
+
+const maxTermLabel = computed(() => {
+  return maxTermDays.value ? `${maxTermDays.value} дн.` : '—'
+})
+
+function monthsLabel(months) {
+  if (months === 1) return '1 месяц'
+  if (months >= 2 && months <= 4) return `${months} месяца`
+  return `${months} месяцев`
 }
 
-function normalizeInterestScheme(item) {
-  if (!item) return null
-
-  const source = item.interest_scheme || item
-
-  return {
-    code: source.code || '',
-    name: source.name || source.code || 'Не указано'
+function payoutShortLabel(code) {
+  const map = {
+    end_of_term: 'В конце срока',
+    end: 'В конце срока',
+    monthly: 'Ежемесячно',
+    quarterly: 'Ежеквартально',
+    yearly: 'Ежегодно',
+    daily: 'Ежедневно'
   }
+  return map[code] || code || 'Не указано'
 }
 
-function getOpenMethodLabel(method) {
+function openMethodLabel(method) {
   if (!method) return 'Не указано'
-  if (method.name && method.name !== method.code) return method.name
+  if (method.name) return method.name
 
   const map = {
     online: 'Онлайн',
@@ -126,168 +162,121 @@ function getOpenMethodLabel(method) {
     gosuslugi: 'Через Госуслуги'
   }
 
-  return map[method.code] || method.name || method.code || 'Не указано'
+  return map[method.code] || method.code || 'Не указано'
 }
 
-function getInterestSchemeLabel(scheme) {
-  if (!scheme) return 'Не указано'
-  if (scheme.name && scheme.name !== scheme.code) return scheme.name
-
-  const map = {
-    end: 'Выплата в конце срока',
-    monthly: 'Ежемесячная выплата',
-    monthly_cap: 'Ежемесячно с капитализацией',
-    quarterly: 'Ежеквартальная выплата',
-    daily: 'Ежедневное начисление'
-  }
-
-  return map[scheme.code] || scheme.name || scheme.code || 'Не указано'
-}
-
-function getRateMethodCode(rate) {
-  return (
-      rate?.open_method?.code ||
-      rate?.open_method_code ||
-      rate?.open_method?.name ||
-      ''
-  )
-}
-
-function getRateSchemeCode(rate) {
-  return (
-      rate?.interest_scheme?.code ||
-      rate?.interest_scheme_code ||
-      ''
-  )
-}
-
-function uniqueByCode(items) {
+function dedupeByValue(items) {
   const map = new Map()
 
   items.forEach((item) => {
-    if (!item?.code) return
-    if (!map.has(item.code)) {
-      map.set(item.code, item)
+    if (!item?.value) return
+    if (!map.has(item.value)) {
+      map.set(item.value, item)
     }
   })
 
   return [...map.values()]
 }
 
-function formatTermLabel(from, to) {
-  const labels = {
-    30: '1 месяц',
-    31: '1 месяц',
-    60: '2 месяца',
-    61: '2 месяца',
-    62: '2 месяца',
-    91: '3 месяца',
-    92: '3 месяца',
-    181: '6 месяцев',
-    182: '6 месяцев',
-    183: '6 месяцев',
-    367: '1 год',
-    548: '1.5 года',
-    730: '2 года',
-    1095: '3 года'
+function representativeDaysForMonths(months, minDays, maxDays) {
+  const special = {
+    4: 120,
+    5: 150,
+    6: 181,
+    7: 212,
+    8: 243,
+    9: 273,
+    10: 304,
+    11: 334,
+    12: 367,
+    18: 548,
+    24: 730,
+    36: 1095
   }
 
-  if (from === to) {
-    return labels[from] ? `${labels[from]} (${from} дн.)` : `${from} дн.`
-  }
+  let value = special[months] || Math.round(months * 30.4)
 
-  if (
-      [181, 182, 183].includes(from) &&
-      [181, 182, 183].includes(to)
-  ) {
-    return '6 месяцев'
-  }
+  if (value < minDays) value = minDays
+  if (maxDays && value > maxDays) value = maxDays
 
-  if (
-      [60, 61, 62].includes(from) &&
-      [60, 61, 62].includes(to)
-  ) {
-    return '2 месяца'
-  }
-
-  if (
-      [91, 92].includes(from) &&
-      [91, 92].includes(to)
-  ) {
-    return '3 месяца'
-  }
-
-  return `${from}–${to} дн.`
+  return value
 }
 
-function getRepresentativeTerm(from, to) {
-  if ([181, 182, 183].includes(from) && [181, 182, 183].includes(to)) {
-    return 181
+function buildMonthCandidates(minDays, maxDays) {
+  const candidates = []
+  const minMonths = Math.max(1, Math.ceil(minDays / 30))
+  const maxMonths = Math.max(minMonths, Math.floor(maxDays / 30))
+
+  for (let month = minMonths; month <= Math.min(maxMonths, 12); month += 1) {
+    candidates.push(month)
   }
 
-  if ([60, 61, 62].includes(from) && [60, 61, 62].includes(to)) {
-    return 60
-  }
+  if (maxMonths >= 18) candidates.push(18)
+  if (maxMonths >= 24) candidates.push(24)
+  if (maxMonths >= 36) candidates.push(36)
 
-  if ([91, 92].includes(from) && [91, 92].includes(to)) {
-    return 91
-  }
-
-  return Number(from)
+  return [...new Set(candidates)].sort((a, b) => a - b)
 }
 
-const normalizedOpenMethods = computed(() => {
-  const directMethods = (selectedVariant.value?.open_methods || [])
-      .map(normalizeOpenMethod)
-      .filter(Boolean)
+function buildTermOptions(baseRates, variant) {
+  if (!variant) return []
 
-  const rateMethods = (selectedVariant.value?.base_rates || [])
-      .map((rate) => normalizeOpenMethod(rate?.open_method || { code: getRateMethodCode(rate), name: getRateMethodCode(rate) }))
-      .filter((item) => item?.code)
+  const minDays = Number(variant.min_term_days || 0)
+  const maxDays = Number(variant.max_term_days || minDays || 0)
 
-  return uniqueByCode([...directMethods, ...rateMethods])
-})
+  const usableRates = (baseRates || []).length
+    ? baseRates
+    : [{ term_from_days: minDays, term_to_days: maxDays }]
 
-const normalizedInterestSchemes = computed(() => {
-  const directSchemes = (selectedVariant.value?.interest_schemes || [])
-      .map(normalizeInterestScheme)
-      .filter(Boolean)
+  const monthCandidates = buildMonthCandidates(minDays, maxDays)
 
-  const rateSchemes = (selectedVariant.value?.base_rates || [])
-      .map((rate) => normalizeInterestScheme(rate?.interest_scheme || { code: getRateSchemeCode(rate), name: getRateSchemeCode(rate) }))
-      .filter((item) => item?.code)
+  const options = monthCandidates
+    .map((months) => {
+      const dayValue = representativeDaysForMonths(months, minDays, maxDays)
 
-  return uniqueByCode([...directSchemes, ...rateSchemes])
-})
+      const allowed = usableRates.some((rate) => {
+        const from = Number(rate.term_from_days || 0)
+        const to = Number(rate.term_to_days || 0)
+        return dayValue >= from && dayValue <= to
+      })
 
-const openMethodOptions = computed(() => {
-  if (!normalizedOpenMethods.value.length) {
-    return [{ value: '', label: 'Не указано' }]
+      if (!allowed) return null
+
+      let label = ''
+
+      if (months === 12) {
+        label = '1 год'
+      } else if (months === 18) {
+        label = '1,5 года'
+      } else if (months === 24) {
+        label = '2 года'
+      } else if (months === 36) {
+        label = '3 года'
+      } else {
+        label = monthsLabel(months)
+      }
+
+      return {
+        value: String(dayValue),
+        label
+      }
+    })
+    .filter(Boolean)
+
+  const fallbackMin = {
+    value: String(minDays),
+    label: `${minDays} дн.`
   }
 
-  return normalizedOpenMethods.value.map((method) => ({
-    value: method.code,
-    label: getOpenMethodLabel(method)
-  }))
-})
+  return dedupeByValue(options.length ? options : [fallbackMin])
+}
 
-const interestSchemeOptions = computed(() => {
-  if (!normalizedInterestSchemes.value.length) {
-    return [{ value: '', label: 'Не указано' }]
-  }
-
-  return normalizedInterestSchemes.value.map((scheme) => ({
-    value: scheme.code,
-    label: getInterestSchemeLabel(scheme)
-  }))
-})
-
-const filteredBaseRates = computed(() => {
-  const rates = selectedVariant.value?.base_rates || []
+const filteredRatesByMethodAndScheme = computed(() => {
+  const rates = props.variant?.base_rates || []
 
   return rates.filter((rate) => {
-    const methodCode = getRateMethodCode(rate)
-    const schemeCode = getRateSchemeCode(rate)
+    const methodCode = rate.open_method?.code || ''
+    const schemeCode = rate.interest_scheme?.code || ''
 
     const methodOk = !form.open_method_code || methodCode === form.open_method_code
     const schemeOk = !form.interest_scheme_code || schemeCode === form.interest_scheme_code
@@ -296,83 +285,102 @@ const filteredBaseRates = computed(() => {
   })
 })
 
+const openMethodOptions = computed(() => {
+  const methodsFromRates = (props.variant?.base_rates || [])
+    .map((rate) => rate.open_method)
+    .filter(Boolean)
+    .map((method) => ({
+      value: method.code,
+      label: openMethodLabel(method)
+    }))
+
+  const methodsFromVariant = (props.variant?.open_methods || [])
+    .filter(Boolean)
+    .map((method) => ({
+      value: method.code,
+      label: openMethodLabel(method)
+    }))
+
+  const options = dedupeByValue([...methodsFromVariant, ...methodsFromRates])
+
+  return options.length ? options : [{ value: '', label: 'Не указано' }]
+})
+
+const interestSchemeOptions = computed(() => {
+  const schemesFromRates = (props.variant?.base_rates || [])
+    .map((rate) => rate.interest_scheme)
+    .filter(Boolean)
+    .map((scheme) => ({
+      value: scheme.code,
+      label: payoutShortLabel(scheme.payout_type)
+    }))
+
+  const schemesFromVariant = (props.variant?.interest_schemes || [])
+    .filter(Boolean)
+    .map((scheme) => ({
+      value: scheme.code,
+      label: payoutShortLabel(scheme.payout_type)
+    }))
+
+  const options = dedupeByValue([...schemesFromVariant, ...schemesFromRates])
+
+  return options.length ? options : [{ value: '', label: 'Не указано' }]
+})
+
 const termOptions = computed(() => {
-  if (!filteredBaseRates.value.length) {
-    if (selectedVariant.value?.min_term_days) {
-      return [{
-        value: String(selectedVariant.value.min_term_days),
-        label: `${selectedVariant.value.min_term_days} дн.`
-      }]
-    }
-
-    return [{ value: '367', label: '1 год (367 дн.)' }]
-  }
-
-  const uniqueRanges = new Map()
-
-  filteredBaseRates.value.forEach((rate) => {
-    const from = Number(rate.term_from_days)
-    const to = Number(rate.term_to_days)
-    const key = `${from}-${to}`
-
-    if (!uniqueRanges.has(key)) {
-      uniqueRanges.set(key, {
-        from,
-        to,
-        value: getRepresentativeTerm(from, to),
-        label: formatTermLabel(from, to)
-      })
-    }
-  })
-
-  return [...uniqueRanges.values()]
-      .sort((a, b) => a.value - b.value)
-      .map((item) => ({
-        value: String(item.value),
-        label: item.label
-      }))
+  return buildTermOptions(filteredRatesByMethodAndScheme.value, props.variant)
 })
 
 const termValue = computed({
   get: () => String(form.term_days || ''),
   set: (value) => {
-    form.term_days = value ? Number(value) : null
-  }
-})
-
-watchEffect(() => {
-  if (props.variantId) {
-    form.variant_id = props.variantId
-  }
-
-  if (selectedVariant.value) {
-    form.variant_id = selectedVariant.value.id
-    form.amount = Number(selectedVariant.value.min_amount || 300000)
-
-    const firstMethod = openMethodOptions.value[0]?.value || ''
-    const firstScheme = interestSchemeOptions.value[0]?.value || ''
-
-    form.open_method_code = firstMethod
-    form.interest_scheme_code = firstScheme
+    form.term_days = value ? Number(value) : ''
   }
 })
 
 watch(
-    () => [form.open_method_code, form.interest_scheme_code, selectedVariant.value?.id],
-    () => {
-      const availableTerms = termOptions.value
-      const currentExists = availableTerms.some((item) => Number(item.value) === Number(form.term_days))
+    () => props.variant,
+    (variant) => {
+      if (!variant) return
 
-      if (!currentExists) {
-        form.term_days = Number(availableTerms[0]?.value || selectedVariant.value?.min_term_days || 367)
-      }
+      form.amount = Number(variant.min_amount || 0)
+      form.open_method_code = openMethodOptions.value[0]?.value || ''
+      form.interest_scheme_code = interestSchemeOptions.value[0]?.value || ''
+      form.term_days = termOptions.value[0]?.value
+          ? Number(termOptions.value[0].value)
+          : Number(variant.min_term_days || 0)
     },
-    { immediate: true }
+    {immediate: true}
 )
 
+watch(
+    () => [form.open_method_code, form.interest_scheme_code],
+    () => {
+      const availableTerms = termOptions.value
+      if (!availableTerms.length) return
+
+      const current = String(form.term_days || '')
+      const exists = availableTerms.some((item) => item.value === current)
+
+      if (!exists) {
+        form.term_days = Number(availableTerms[0].value)
+      }
+    }
+)
+
+const isReadyToSubmit = computed(() => {
+  return Boolean(
+      props.variant &&
+      form.amount &&
+      form.term_days
+  )
+})
+
 function submit() {
+  if (!props.variant) return
+
   emit('submit', {
-    variant_id: Number(form.variant_id),
+    variant_id: Number(props.variant.id),
     amount: Number(form.amount),
     term_days: Number(form.term_days),
     open_method_code: form.open_method_code || null,
@@ -380,8 +388,8 @@ function submit() {
     has_subscription: form.has_subscription,
     is_salary_client: form.is_salary_client,
     is_pension_client: form.is_pension_client,
-    monthly_spend: form.monthly_spend ? Number(form.monthly_spend) : null,
-    savings_balance: form.savings_balance ? Number(form.savings_balance) : null,
+    monthly_spend: null,
+    savings_balance: null,
     has_premium_package: form.has_premium_package,
     promo_code: form.promo_code || null,
     extra_context: {}
@@ -398,28 +406,10 @@ function submit() {
   margin: 0 0 18px;
 }
 
-.calculator__grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  margin-bottom: 16px;
-}
-
-.calculator__grid--secondary {
-  grid-template-columns: repeat(2, 1fr);
-}
-
-.calculator__checks {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 14px;
-  margin-bottom: 16px;
-}
-
 .calculator__selected {
-  margin-bottom: 16px;
-  padding: 16px 18px;
-  border-radius: 18px;
+  margin-bottom: 18px;
+  padding: 18px 20px;
+  border-radius: 20px;
   background: #f5fbff;
   border: 1px solid var(--border);
 }
@@ -431,18 +421,42 @@ function submit() {
 }
 
 .calculator__selected-name {
-  font-weight: 700;
-  margin-bottom: 4px;
+  font-weight: 800;
+  font-size: 18px;
+  margin-bottom: 6px;
 }
 
 .calculator__selected-meta {
   color: var(--text-soft);
   font-size: 14px;
+  line-height: 1.5;
+}
+
+.calculator__placeholder {
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: #fbfeff;
+  border: 1px solid var(--border);
+  color: var(--text-soft);
+}
+
+.calculator__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.calculator__checks {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
 }
 
 @media (max-width: 900px) {
   .calculator__grid,
-  .calculator__grid--secondary,
   .calculator__checks {
     grid-template-columns: 1fr;
   }

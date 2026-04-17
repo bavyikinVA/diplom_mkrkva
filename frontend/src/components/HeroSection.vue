@@ -4,28 +4,16 @@
       <div class="hero__text">
         <h1>Подберите вклад по сумме, сроку и условиям</h1>
         <p>
-          Удобный каталог банковских вкладов с фильтрами и отдельным калькулятором доходности.
+          Удобный каталог банковских вкладов с фильтрами и калькулятором доходности.
         </p>
         <div class="hero__actions">
-          <RouterLink to="/catalog" class="btn btn-primary">Смотреть предложения</RouterLink>
-          <RouterLink to="/calculator" class="btn btn-secondary">Открыть калькулятор</RouterLink>
-        </div>
-      </div>
+          <RouterLink :to="{ name: 'catalog' }" class="btn btn-primary">
+            Смотреть предложения
+          </RouterLink>
 
-      <div class="hero__stats">
-        <div class="hero__stat">
-          <span>Фильтрация</span>
-          <strong>по параметрам вклада</strong>
-        </div>
-
-        <div class="hero__stat">
-          <span>Расчёт</span>
-          <strong>итоговой суммы и процентов</strong>
-        </div>
-
-        <div class="hero__stat">
-          <span>Быстрый переход</span>
-          <strong>к каталогу и калькулятору</strong>
+          <RouterLink :to="{ name: 'calculator' }" class="btn btn-secondary">
+            Открыть калькулятор
+          </RouterLink>
         </div>
       </div>
     </div>
@@ -67,28 +55,6 @@ import { RouterLink } from 'vue-router'
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 24px;
-}
-
-.hero__stats {
-  display: grid;
-  gap: 14px;
-}
-
-.hero__stat {
-  border-radius: 22px;
-  background: linear-gradient(180deg, #ffffff 0%, #f2fbff 100%);
-  border: 1px solid var(--border);
-  padding: 20px;
-}
-
-.hero__stat span {
-  display: block;
-  color: var(--text-soft);
-  margin-bottom: 8px;
-}
-
-.hero__stat strong {
-  font-size: 18px;
 }
 
 @media (max-width: 900px) {

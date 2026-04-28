@@ -13,7 +13,6 @@ from app.schemas.deposit import (
     DepositCalculationRequest,
     DepositCalculationResult,
     DepositsStatsOut,
-    DepositVariantOut,
 )
 from app.services.deposit_calculator import (
     CalculationContext,

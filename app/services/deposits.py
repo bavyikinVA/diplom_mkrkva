@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
-from sqlalchemy import Select, and_, exists, func, or_, select
+from sqlalchemy import Select, and_, exists, func, or_, select, Row, RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -57,7 +58,7 @@ def _base_variant_stmt() -> Select:
 
 def apply_search_filters(stmt: Select, params: DepositSearchParams) -> Select:
     if params.currency:
-        stmt = stmt.where(DepositProduct.currency == params.currency.upper())
+        stmt = stmt.where(params.currency.upper() == DepositProduct.currency)
 
     if params.bank_ids:
         stmt = stmt.where(DepositProduct.bank_id.in_(params.bank_ids))
@@ -188,7 +189,7 @@ def apply_search_filters(stmt: Select, params: DepositSearchParams) -> Select:
                         .where(
                             DepositInterestScheme.id
                             == DepositBaseRate.interest_scheme_id,
-                            DepositInterestScheme.code == params.interest_scheme_code,
+                            params.interest_scheme_code == DepositInterestScheme.code,
                             DepositInterestScheme.is_active.is_(True),
                         )
                     ),
@@ -372,10 +373,10 @@ async def search_deposit_variants(
 async def get_variant_or_404(
     session: AsyncSession,
     variant_id: int,
-) -> DepositVariant:
-    stmt = _base_variant_stmt().where(DepositVariant.id == variant_id)
+) -> Row[Any] | RowMapping:
+    stmt = _base_variant_stmt().where(variant_id == DepositVariant.id)
     result = await session.scalars(stmt)
-    variant = result.unique().first()
+    variant: Row[Any] | RowMapping | None | Any = result.unique().first()
 
     if variant is None:
         raise DepositCalculationError("Вариант вклада не найден")

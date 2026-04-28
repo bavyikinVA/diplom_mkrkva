@@ -47,7 +47,6 @@
 <script setup>
 import { computed } from 'vue'
 import { useFormatters } from '../composables/useFormatters'
-import UiBadge from './UiBadge.vue'
 
 const props = defineProps({
   result: {
@@ -61,7 +60,9 @@ const { currency, percent } = useFormatters()
 const totalWithInterest = computed(() => {
   const finalAmount = Number(props.result?.final_amount || 0)
   const totalInterest = Number(props.result?.total_interest || 0)
-  return finalAmount + totalInterest
+  const capitalizationEnabled = Boolean(props.result?.capitalization_enabled)
+
+  return capitalizationEnabled ? finalAmount : finalAmount + totalInterest
 })
 
 const payoutLabel = computed(() => {

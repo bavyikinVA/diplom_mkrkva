@@ -8,10 +8,7 @@
         {{ bankName }} — {{ variantName }}
       </div>
       <div class="calculator__selected-meta">
-        Сумма от {{ amountLabel }} · срок от {{ minTermLabel }}
-        <template v-if="maxTermDays">
-          до {{ maxTermLabel }}
-        </template>
+        {{ selectedMetaLabel }}
       </div>
     </div>
 
@@ -49,7 +46,7 @@
 
       <UiSelect
         v-model="form.interest_scheme_code"
-        label="Выплата процентов"
+        label="Начисление процентов"
         :options="interestSchemeOptions"
       />
     </div>
@@ -114,13 +111,19 @@ const bankName = computed(() => {
 })
 
 const currencyCode = computed(() => props.variant?.product?.currency || 'RUB')
-const minAmount = computed(() => Number(props.variant?.min_amount || 0))
+const minAmount = computed(() => props.variant?.min_amount ?? null)
+const maxAmount = computed(() => props.variant?.max_amount ?? null)
 const minTermDays = computed(() => Number(props.variant?.min_term_days || 0))
 const maxTermDays = computed(() => Number(props.variant?.max_term_days || 0))
 
 const amountLabel = computed(() => {
-  if (!minAmount.value) return '—'
-  return `${minAmount.value.toFixed(2)} ${currencyCode.value}`
+  if (minAmount.value == null) return '—'
+  return formatMoneyWithCurrency(minAmount.value, currencyCode.value)
+})
+
+const maxAmountLabel = computed(() => {
+  if (maxAmount.value == null) return ''
+  return formatMoneyWithCurrency(maxAmount.value, currencyCode.value)
 })
 
 const minTermLabel = computed(() => {
@@ -130,6 +133,31 @@ const minTermLabel = computed(() => {
 const maxTermLabel = computed(() => {
   return maxTermDays.value ? `${maxTermDays.value} дн.` : '—'
 })
+
+const selectedMetaLabel = computed(() => {
+  const amountText = maxAmount.value != null
+    ? `Сумма от ${amountLabel.value} до ${maxAmountLabel.value}`
+    : `Сумма от ${amountLabel.value}`
+
+  const termText = maxTermDays.value
+    ? `срок от ${minTermLabel.value} до ${maxTermLabel.value}`
+    : `срок от ${minTermLabel.value}`
+
+  return `${amountText} · ${termText}`
+})
+
+function formatMoneyWithCurrency(value, currencyCode) {
+  const amount = Number(value)
+
+  if (Number.isNaN(amount)) {
+    return `0 ${currencyCode}`
+  }
+
+  return `${new Intl.NumberFormat('ru-RU', {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: amount % 1 === 0 ? 0 : 2
+  }).format(amount)} ${currencyCode}`
+}
 
 function monthsLabel(months) {
   if (months === 1) return '1 месяц'
@@ -147,6 +175,17 @@ function payoutShortLabel(code) {
     daily: 'Ежедневно'
   }
   return map[code] || code || 'Не указано'
+}
+
+function schemeLabel(scheme) {
+  if (!scheme) return 'Не указано'
+
+  if (scheme.name) {
+    return scheme.name
+  }
+
+  const payout = payoutShortLabel(scheme.payout_type)
+  return scheme.capitalization_enabled ? `${payout} с капитализацией` : payout
 }
 
 function openMethodLabel(method) {
@@ -242,7 +281,7 @@ function buildTermOptions(baseRates, variant) {
 
       if (!allowed) return null
 
-      let label = ''
+      let label
 
       if (months === 12) {
         label = '1 год'
@@ -312,21 +351,24 @@ const interestSchemeOptions = computed(() => {
     .filter(Boolean)
     .map((scheme) => ({
       value: scheme.code,
-      label: payoutShortLabel(scheme.payout_type)
+      label: schemeLabel(scheme)
     }))
 
   const schemesFromVariant = (props.variant?.interest_schemes || [])
     .filter(Boolean)
     .map((scheme) => ({
       value: scheme.code,
-      label: payoutShortLabel(scheme.payout_type)
+      label: schemeLabel(scheme)
     }))
 
   const options = dedupeByValue([...schemesFromVariant, ...schemesFromRates])
 
   return options.length ? options : [{ value: '', label: 'Не указано' }]
 })
-
+computed(() => {
+  const schemes = props.variant?.interest_schemes || []
+  return schemes.find((scheme) => scheme.code === form.interest_scheme_code) || null
+});
 const termOptions = computed(() => {
   return buildTermOptions(filteredRatesByMethodAndScheme.value, props.variant)
 })
@@ -339,40 +381,45 @@ const termValue = computed({
 })
 
 watch(
-    () => props.variant,
-    (variant) => {
-      if (!variant) return
+  () => props.variant,
+  (variant) => {
+    if (!variant) return
 
-      form.amount = Number(variant.min_amount || 0)
-      form.open_method_code = openMethodOptions.value[0]?.value || ''
-      form.interest_scheme_code = interestSchemeOptions.value[0]?.value || ''
-      form.term_days = termOptions.value[0]?.value
-          ? Number(termOptions.value[0].value)
-          : Number(variant.min_term_days || 0)
-    },
-    {immediate: true}
+    form.amount = Number(variant.min_amount || 0)
+    form.open_method_code = openMethodOptions.value[0]?.value || ''
+
+    const preferredScheme = (variant.interest_schemes || []).find(
+      (scheme) => scheme?.capitalization_enabled === true
+    )
+
+    form.interest_scheme_code = preferredScheme?.code || interestSchemeOptions.value[0]?.value || ''
+    form.term_days = termOptions.value[0]?.value
+      ? Number(termOptions.value[0].value)
+      : Number(variant.min_term_days || 0)
+  },
+  { immediate: true }
 )
 
 watch(
-    () => [form.open_method_code, form.interest_scheme_code],
-    () => {
-      const availableTerms = termOptions.value
-      if (!availableTerms.length) return
+  () => [form.open_method_code, form.interest_scheme_code],
+  () => {
+    const availableTerms = termOptions.value
+    if (!availableTerms.length) return
 
-      const current = String(form.term_days || '')
-      const exists = availableTerms.some((item) => item.value === current)
+    const current = String(form.term_days || '')
+    const exists = availableTerms.some((item) => item.value === current)
 
-      if (!exists) {
-        form.term_days = Number(availableTerms[0].value)
-      }
+    if (!exists) {
+      form.term_days = Number(availableTerms[0].value)
     }
+  }
 )
 
 const isReadyToSubmit = computed(() => {
   return Boolean(
-      props.variant &&
-      form.amount &&
-      form.term_days
+    props.variant &&
+    form.amount &&
+    form.term_days
   )
 })
 
@@ -424,12 +471,6 @@ function submit() {
   font-weight: 800;
   font-size: 18px;
   margin-bottom: 6px;
-}
-
-.calculator__selected-meta {
-  color: var(--text-soft);
-  font-size: 14px;
-  line-height: 1.5;
 }
 
 .calculator__placeholder {

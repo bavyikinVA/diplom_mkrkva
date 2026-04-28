@@ -23,6 +23,10 @@
         Автопролонгация: {{ autoProlongation ? 'Да' : 'Нет' }}
       </span>
 
+      <span class="deposit__feature" :class="{ 'is-active': hasCapitalization }">
+        Капитализация: {{ hasCapitalization ? 'Есть' : 'Нет' }}
+      </span>
+
       <span class="deposit__feature">
         Валюта: {{ currencyCode }}
       </span>
@@ -30,18 +34,18 @@
 
     <div class="deposit__grid">
       <div class="deposit__metric">
-        <span>Минимальная сумма</span>
-        <strong>{{ currency(minAmount, currencyCode) }}</strong>
+        <span>Сумма</span>
+        <strong>{{ amountRangeLabel }}</strong>
       </div>
 
       <div class="deposit__metric">
         <span>Срок</span>
-        <strong>{{ daysToMonthsLabel(minTermDays) }}</strong>
+        <strong>{{ termRangeLabel }}</strong>
       </div>
 
       <div class="deposit__metric">
         <span>Номинальная ставка</span>
-        <strong>{{ percent(displayRate) }}</strong>
+        <strong>{{ nominalRateLabel }}</strong>
       </div>
 
       <div class="deposit__metric">
@@ -50,7 +54,7 @@
       </div>
 
       <div class="deposit__metric">
-        <span>Схемы начисления</span>
+        <span>Начисление процентов</span>
         <strong>{{ interestSchemesLabel }}</strong>
       </div>
     </div>
@@ -76,32 +80,7 @@
 <script setup>
 import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
-import { useFormatters } from '../composables/useFormatters'
 import { useDepositsStore } from '../stores/deposits'
-
-/**
- * @typedef {Object} DepositCardItem
- * @property {number|string} [id]
- * @property {string} [name]
- * @property {string|null} [description]
- * @property {boolean} [allow_topup]
- * @property {boolean} [allow_partial_withdraw]
- * @property {boolean} [auto_prolongation]
- * @property {number|string|null} [min_amount]
- * @property {number|null} [min_term_days]
- * @property {number|string|null} [matched_final_nominal_rate]
- * @property {{ nominal_rate?: number|string|null }} [matched_rate]
- * @property {number|string|null} [nominal_rate]
- * @property {{ nominal_rate?: number|string|null }} [base_rate]
- * @property {Array<{ name?: string }>} [open_methods]
- * @property {Array<{ name?: string }>} [interest_schemes]
- * @property {{ name?: string }} [bank]
- * @property {{
- *   currency?: string,
- *   bank?: { name?: string },
- *   bank_name?: string
- * }} [product]
- */
 
 const props = defineProps({
   item: {
@@ -111,9 +90,6 @@ const props = defineProps({
 })
 
 const store = useDepositsStore()
-const { currency, percent, daysToMonthsLabel } = useFormatters()
-
-/** @type {import('vue').ComputedRef<DepositCardItem>} */
 const itemModel = computed(() => props.item || {})
 
 const depositId = computed(() => itemModel.value.id ?? '')
@@ -124,12 +100,12 @@ const allowTopup = computed(() => Boolean(itemModel.value.allow_topup))
 const allowPartialWithdraw = computed(() => Boolean(itemModel.value.allow_partial_withdraw))
 const autoProlongation = computed(() => Boolean(itemModel.value.auto_prolongation))
 
-const minAmount = computed(() => itemModel.value.min_amount ?? 0)
-const minTermDays = computed(() => itemModel.value.min_term_days ?? 0)
+const minAmount = computed(() => itemModel.value.min_amount ?? null)
+const maxAmount = computed(() => itemModel.value.max_amount ?? null)
+const minTermDays = computed(() => itemModel.value.min_term_days ?? null)
+const maxTermDays = computed(() => itemModel.value.max_term_days ?? null)
 
-const currencyCode = computed(() => {
-  return itemModel.value.product?.currency || 'RUB'
-})
+const currencyCode = computed(() => itemModel.value.product?.currency || 'RUB')
 
 const bankName = computed(() => {
   return (
@@ -138,6 +114,118 @@ const bankName = computed(() => {
     itemModel.value.product?.bank_name ||
     'Банк'
   )
+})
+
+const hasCapitalization = computed(() => {
+  const schemes = itemModel.value.interest_schemes || []
+  return schemes.some((scheme) => scheme?.capitalization_enabled === true)
+})
+
+function formatIntegerAmount(value) {
+  if (value == null || value === '') return null
+
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) return null
+
+  return new Intl.NumberFormat('ru-RU', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(numericValue)
+}
+
+function currencySymbol(code) {
+  const map = {
+    RUB: '₽',
+    USD: '$',
+    EUR: '€',
+    CNY: '¥',
+    JPY: '¥'
+  }
+
+  return map[code] || code
+}
+
+function formatMoneyWhole(value, code) {
+  const formatted = formatIntegerAmount(value)
+  if (!formatted) return '—'
+  return `${formatted} ${currencySymbol(code)}`
+}
+
+function daysToWholeMonths(days) {
+  if (days == null) return null
+  const numericDays = Number(days)
+  if (!Number.isFinite(numericDays)) return null
+  return Math.max(1, Math.round(numericDays / 30.4375))
+}
+
+function pluralizeMonths(months) {
+  const value = Math.abs(Number(months))
+  const mod10 = value % 10
+  const mod100 = value % 100
+
+  if (mod10 === 1 && mod100 !== 11) return 'мес.'
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'мес.'
+  return 'мес.'
+}
+
+function formatMonthsLabel(days) {
+  const months = daysToWholeMonths(days)
+  if (months == null) return null
+  return `${months} ${pluralizeMonths(months)}`
+}
+
+function formatPercentValue(value) {
+  if (value == null || value === '') return null
+
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) return null
+
+  return `${new Intl.NumberFormat('ru-RU', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  }).format(numericValue)}%`
+}
+
+const amountRangeLabel = computed(() => {
+  const min = minAmount.value
+  const max = maxAmount.value
+
+  if (min != null && max != null) {
+    return `от ${formatMoneyWhole(min, currencyCode.value)} до ${formatMoneyWhole(max, currencyCode.value)}`
+  }
+
+  if (min != null) {
+    return `от ${formatMoneyWhole(min, currencyCode.value)}`
+  }
+
+  if (max != null) {
+    return `до ${formatMoneyWhole(max, currencyCode.value)}`
+  }
+
+  return 'Не указано'
+})
+
+const termRangeLabel = computed(() => {
+  const min = minTermDays.value
+  const max = maxTermDays.value
+
+  if (min != null && max != null && Number(min) === Number(max)) {
+    return formatMonthsLabel(min) || 'Не указано'
+  }
+
+  if (min != null && max != null) {
+    return `от ${formatMonthsLabel(min)} до ${formatMonthsLabel(max)}`
+  }
+
+  if (min != null) {
+    return `от ${formatMonthsLabel(min)}`
+  }
+
+  if (max != null) {
+    return `до ${formatMonthsLabel(max)}`
+  }
+
+  return 'Не указано'
 })
 
 const displayRate = computed(() => {
@@ -150,6 +238,38 @@ const displayRate = computed(() => {
   )
 })
 
+const rateFrom = computed(() => {
+  return itemModel.value.min_nominal_rate ?? itemModel.value.rate_from ?? null
+})
+
+const rateTo = computed(() => {
+  return itemModel.value.max_nominal_rate ?? itemModel.value.rate_to ?? null
+})
+
+const nominalRateLabel = computed(() => {
+  if (displayRate.value != null) {
+    return `${formatPercentValue(displayRate.value)} годовых`
+  }
+
+  if (rateFrom.value != null && rateTo.value != null) {
+    if (Number(rateFrom.value) === Number(rateTo.value)) {
+      return `${formatPercentValue(rateFrom.value)} годовых`
+    }
+
+    return `от ${formatPercentValue(rateFrom.value)} до ${formatPercentValue(rateTo.value)} годовых`
+  }
+
+  if (rateFrom.value != null) {
+    return `от ${formatPercentValue(rateFrom.value)} годовых`
+  }
+
+  if (rateTo.value != null) {
+    return `до ${formatPercentValue(rateTo.value)} годовых`
+  }
+
+  return '—'
+})
+
 const openMethodsLabel = computed(() => {
   const methods = itemModel.value.open_methods || []
   if (!methods.length) return 'Не указано'
@@ -159,6 +279,14 @@ const openMethodsLabel = computed(() => {
 const interestSchemesLabel = computed(() => {
   const schemes = itemModel.value.interest_schemes || []
   if (!schemes.length) return 'Не указано'
+
+  const hasPayout = schemes.some((scheme) => scheme?.capitalization_enabled === false)
+  const hasCap = schemes.some((scheme) => scheme?.capitalization_enabled === true)
+
+  if (hasPayout && hasCap) {
+    return 'Выплата процентов / капитализация'
+  }
+
   return schemes.map((scheme) => scheme.name).filter(Boolean).join(', ')
 })
 
@@ -168,6 +296,8 @@ function selectVariant() {
   store.setSelectedVariant(props.item)
 }
 </script>
+
+
 
 <style scoped>
 .deposit {

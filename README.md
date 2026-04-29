@@ -87,5 +87,7 @@
 
 ## Автор
 Бавыкин Владислав
+
 Магистр ФКН ВГУ 
+
 Python Backend/ML Developer
